@@ -3,89 +3,104 @@ import requests
 import pandas as pd
 import plotly.express as px
 
-st.set_page_config(page_title="Steam DNA Analyzer", page_icon="🎮", layout="centered")
-st.title("🎮 스팀 게이밍 DNA 분석 대시보드")
-st.write("유저의 스팀 라이브러리를 분석하여 게이밍 성향과 랭킹을 시각화합니다.")
+st.set_page_config(page_title="Steam DNA & Battle", page_icon="🔥", layout="wide")
 
-# 선웅이가 뚫어낸 진짜 마스터 키 적용 완료!
+# 🚨 네 진짜 스팀 API 키를 여기에 넣어!
 STEAM_API_KEY = "ACFFB08C7B7E24EAC7ED03414035F9DC"
 
-steam_id = st.text_input("SteamID64를 입력하세요 (예: 76561198028121353):", "")
-analyze_btn = st.button("내 진짜 전적 분석하기")
+# --- 1. 장르 맵핑 사전 (우회 꼼수) ---
+# 유명 게임들의 장르를 미리 매핑해둠 (여기에 없는 건 '기타'로 분류됨)
+GENRE_MAP = {
+    "Tom Clancy's Rainbow Six Siege": "FPS", "PUBG: BATTLEGROUNDS": "FPS", 
+    "Apex Legends": "FPS", "Counter-Strike 2": "FPS", "Overwatch 2": "FPS",
+    "Grand Theft Auto V": "오픈월드", "Cyberpunk 2077": "RPG", "ELDEN RING": "RPG",
+    "Stardew Valley": "시뮬레이션", "Dota 2": "AOS", "Rust": "생존"
+}
 
-st.divider()
+def get_steam_data(steam_id):
+    """스팀 서버에서 데이터를 긁어와서 데이터프레임으로 만들어주는 핵심 엔진"""
+    url = "http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/"
+    params = {"key": STEAM_API_KEY, "steamid": steam_id, "format": "json", "include_appinfo": "1"}
+    resp = requests.get(url, params=params)
+    if resp.status_code != 200: return None
+    data = resp.json()
+    if not data.get('response') or 'games' not in data['response']: return None
+    
+    df = pd.DataFrame(data['response']['games'])
+    df = df[df['playtime_forever'] > 0]
+    df['플레이타임(시간)'] = df['playtime_forever'] / 60
+    # 장르 부활 로직!
+    df['장르'] = df['name'].apply(lambda x: GENRE_MAP.get(x, '기타 장르'))
+    return df.sort_values(by='플레이타임(시간)', ascending=False).reset_index(drop=True)
 
-def format_playtime(hours_float):
-    h = int(hours_float)
-    m = int(round((hours_float - h) * 60))
-    if m == 0: return f"{h}시간"
-    return f"{h}시간 {m}분"
+# --- 2. 메인 UI 구성 ---
+st.title("🔥 스팀 게이밍 DNA & 전적 배틀")
 
-if analyze_btn:
-    if len(steam_id) != 17 or not steam_id.isdigit():
-        st.warning("⚠️ SteamID64는 17자리 숫자여야 합니다.")
-    else:
-        with st.spinner('스팀 서버에서 진짜 데이터를 긁어오는 중입니다...'):
-            url = "http://api.steampowered.com/IPlayerService/GetOwnedGames/v0001/"
-            params = {
-                "key": STEAM_API_KEY,
-                "steamid": steam_id,
-                "format": "json",
-                "include_appinfo": "1" 
-            }
+col_search1, col_search2 = st.columns(2)
+with col_search1:
+    my_id = st.text_input("👑 내 SteamID64 (필수):", "76561198028121353")
+with col_search2:
+    friend_id = st.text_input("⚔️ 친구 SteamID64 (배틀용, 선택):", "")
+
+if st.button("전적 분석 & 배틀 시작!"):
+    with st.spinner('서버에서 데이터를 불러오는 중...'):
+        my_df = get_steam_data(my_id)
+        
+        if my_df is None:
+            st.error("내 계정 데이터를 불러올 수 없습니다. 프로필 공개 여부나 ID를 확인하세요.")
+        else:
+            # --- [기능 1] 인스타 박제용 요약 카드 ---
+            st.divider()
+            st.subheader("📸 Instagram 공유용 요약 카드")
+            my_total_hours = my_df['플레이타임(시간)'].sum()
+            my_top_game = my_df.iloc[0]['name']
+            top_genre = my_df.groupby('장르')['플레이타임(시간)'].sum().idxmax()
             
-            response = requests.get(url, params=params)
-            
-            if response.status_code == 200:
-                data = response.json()
+            # 인스타 스토리 느낌의 컨테이너 박스
+            with st.container(border=True):
+                c1, c2, c3 = st.columns(3)
+                c1.metric("총 갈아넣은 시간", f"{my_total_hours:,.0f} 시간")
+                c2.metric("인생 최고의 게임", my_top_game)
+                c3.metric("나의 게이밍 성향", f"{top_genre} 마스터")
+                st.caption("✨ 캡처해서 인스타 스토리에 올려보세요! #SteamDNA #인생전적")
+
+            # --- [기능 2] 부활한 장르 DNA 파이 차트 ---
+            st.subheader("🧬 나의 게이밍 장르 DNA")
+            genre_df = my_df.groupby('장르')['플레이타임(시간)'].sum().reset_index()
+            fig_pie = px.pie(genre_df, values='플레이타임(시간)', names='장르', hole=0.4)
+            fig_pie.update_traces(textposition='inside', textinfo='percent+label', 
+                                  textfont=dict(size=14, color='white'), marker=dict(line=dict(color='#000000', width=1)))
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+            # --- [기능 3] 친구와의 영혼의 맞다이 (배틀 모드) ---
+            if friend_id:
+                st.divider()
+                st.header("⚔️ 전적 맞다이: 나 vs 친구")
+                friend_df = get_steam_data(friend_id)
                 
-                if not data.get('response') or 'games' not in data['response']:
-                    st.error("🔒 이 계정은 스팀 프로필이 비공개 상태입니다. (공개된 아이디로 테스트해 보세요!)")
+                if friend_df is None:
+                    st.warning("친구 계정이 비공개이거나 데이터를 불러올 수 없습니다.")
                 else:
-                    st.success("✅ 스팀 서버 데이터 연동 대성공! 실제 라이브러리를 분석합니다.")
+                    friend_total = friend_df['플레이타임(시간)'].sum()
                     
-                    games = data['response']['games']
-                    df = pd.DataFrame(games)
-                    
-                    # 플레이타임이 0인 게임 제외 및 분 -> 시간 변환
-                    df = df[df['playtime_forever'] > 0]
-                    df['플레이타임(시간)'] = df['playtime_forever'] / 60
-                    
-                    # 상위 15개 게임 추출
-                    df_top = df.sort_values(by='플레이타임(시간)', ascending=False).head(15).reset_index(drop=True)
-                    df_top['플레이타임'] = df_top['플레이타임(시간)'].apply(format_playtime)
-                    df_top['순위'] = [f"{i+1}위" for i in range(len(df_top))]
-                    
-                    # 글로벌 랭킹 추정
-                    total_hours = df['플레이타임(시간)'].sum()
-                    estimated_top_percent = max(0.01, 100 - (total_hours / 50))
-                    
-                    st.markdown(f"### 🏆 당신의 스팀 글로벌 랭킹 (추정)")
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric(label="총 플레이타임", value=f"{total_hours:,.0f} 시간")
-                    with col2:
-                        st.metric(label="글로벌 상위", value=f"Top {estimated_top_percent:.2f}%", delta="상위권 진입!")
-                    with col3:
-                        st.metric(label="보유 게임 수", value=f"{len(df):,} 개")
-                
-                    st.divider()
-                
-                    # 그래프 그리기
-                    st.subheader("📊 내 인생을 갈아 넣은 게임 TOP")
-                    fig_bar = px.bar(df_top.sort_values(by='플레이타임(시간)', ascending=True), 
-                                     x='플레이타임(시간)', y='name', orientation='h', 
-                                     color='플레이타임(시간)', color_continuous_scale='Turbo')
-                    fig_bar.update_yaxes(title_text="") 
-                    fig_bar.update_xaxes(title_text="플레이타임 (시간)")
-                    fig_bar.update_traces(text=df_top.sort_values(by='플레이타임(시간)', ascending=True)['플레이타임'], textposition='inside', insidetextanchor='middle')
-                    fig_bar.update_layout(height=500)
-                    st.plotly_chart(fig_bar, use_container_width=True)
-                    
-                    # 표 출력
-                    st.subheader("📑 상세 라이브러리 전적")
-                    display_df = df_top[['순위', 'name', '플레이타임']].set_index('순위')
-                    display_df.rename(columns={'name': '게임명'}, inplace=True)
-                    st.dataframe(display_df, use_container_width=True)
+                    b1, b2 = st.columns(2)
+                    with b1:
+                        st.subheader("👑 내 전적")
+                        st.metric("총 플레이타임", f"{my_total_hours:,.0f} 시간")
+                        st.dataframe(my_df[['name', '플레이타임(시간)']].head(5), use_container_width=True)
+                    with b2:
+                        st.subheader("⚔️ 상대방 전적")
+                        # 이겼는지 졌는지 색깔로 띄워주기
+                        delta_val = friend_total - my_total_hours
+                        st.metric("총 플레이타임", f"{friend_total:,.0f} 시간", delta=f"나와의 차이: {delta_val:,.0f}시간", delta_color="inverse")
+                        st.dataframe(friend_df[['name', '플레이타임(시간)']].head(5), use_container_width=True)
             else:
-                st.error(f"통신 오류가 발생했습니다. (상태 코드: {response.status_code})")
+                st.info("💡 팁: 친구의 SteamID를 입력하면 전적 비교 배틀이 가능합니다!")
+                
+            # 기본 막대 그래프 (하단 배치)
+            st.divider()
+            st.subheader("📊 전체 라이브러리 (상위 15개)")
+            fig_bar = px.bar(my_df.head(15).sort_values(by='플레이타임(시간)', ascending=True), 
+                             x='플레이타임(시간)', y='name', orientation='h', color='플레이타임(시간)')
+            fig_bar.update_yaxes(title_text="")
+            st.plotly_chart(fig_bar, use_container_width=True)

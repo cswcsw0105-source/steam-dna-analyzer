@@ -42,8 +42,7 @@ def get_steam_profile_name(steam_id):
         resp = requests.get(url, params=params)
         if resp.status_code == 200:
             players = resp.json().get('response', {}).get('players', [])
-            if players:
-                return players[0].get('personaname', '알 수 없는 유저')
+            if players: return players[0].get('personaname', '알 수 없는 유저')
     except: pass
     return "알 수 없는 유저"
 
@@ -116,6 +115,26 @@ with tab1:
                     f1.metric("💸 2026년 최저시급(10,320원) 알바를 했다면?", f"약 {int(lost_money / 10000):,}만 원", delta="내 포르쉐 박스터가 허공에...", delta_color="inverse")
                     f2.metric("📚 이 시간 동안 수능 공부를 했다면?", univ_tier, delta="내 잃어버린 학벌...", delta_color="inverse")
 
+                st.divider()
+                st.subheader("🧬 나의 게이밍 장르 DNA")
+                genre_df = my_df.groupby('장르')['플레이타임(시간)'].sum().reset_index().sort_values(by='플레이타임(시간)', ascending=False)
+                if len(genre_df) > 5:
+                    top_4 = genre_df.head(4)
+                    others_hours = genre_df.iloc[4:]['플레이타임(시간)'].sum()
+                    genre_df = pd.concat([top_4, pd.DataFrame({'장르': ['그 외 잡다한 장르들'], '플레이타임(시간)': [others_hours]})], ignore_index=True)
+                genre_df['포맷_시간'] = genre_df['플레이타임(시간)'].apply(format_playtime)
+                fig_pie = px.pie(genre_df, values='플레이타임(시간)', names='장르', hole=0.4)
+                fig_pie.update_traces(textposition='inside', textinfo='percent+label', textfont=dict(size=14, color='white'), customdata=genre_df['포맷_시간'], hovertemplate="<b>%{label}</b><br>플레이타임: %{customdata}<extra></extra>")
+                st.plotly_chart(fig_pie, use_container_width=True)
+
+                # ✨ [부활 1] 내 인생을 갈아 넣은 게임 TOP 15 막대그래프!
+                st.subheader(f"📊 {my_nickname}님의 전체 라이브러리 TOP 15")
+                top15_df = my_df.head(15).sort_values(by='플레이타임(시간)', ascending=True)
+                fig_bar = px.bar(top15_df, x='플레이타임(시간)', y='name', orientation='h', color='플레이타임(시간)')
+                fig_bar.update_yaxes(title_text="")
+                fig_bar.update_traces(text=top15_df['표기용_시간'], textposition='inside', insidetextanchor='middle', hovertemplate="<b>%{y}</b><br>플레이타임: %{text}<extra></extra>")
+                st.plotly_chart(fig_bar, use_container_width=True)
+
                 # --- ⚔️ 진짜 배틀 로직 ---
                 if friend_id:
                     st.divider()
@@ -130,13 +149,19 @@ with tab1:
                         f_top_genre = f_top_genre_hours.idxmax() if f_top_genre_hours.idxmax() != '기타 장르' or len(f_top_genre_hours) == 1 else f_top_genre_hours.drop('기타 장르').idxmax()
                         save_to_db(friend_id, friend_nickname, friend_total, friend_df.iloc[0]['name'], f_top_genre)
                         
-                        # [라운드 1] 총 플레이타임
                         st.subheader(f"Round 1. 총 잉여 시간 대결 (승자: {'나 👑' if my_total_hours > friend_total else '친구 👑'})")
                         b1, b2 = st.columns(2)
                         b1.metric(f"나 ({my_nickname})", f"{int(my_total_hours):,} 시간")
                         b2.metric(f"친구 ({friend_nickname})", f"{int(friend_total):,} 시간", delta=f"{int(friend_total - my_total_hours)}시간 차이", delta_color="inverse")
 
-                        # [라운드 2] 한 우물 장인 대결
+                        # ✨ [부활 2] 양측 상위 5개 게임 표!
+                        st.write("▼ 양측 상위 5개 게임 전적 비교")
+                        t1, t2 = st.columns(2)
+                        with t1:
+                            st.dataframe(my_df[['name', '표기용_시간']].head(5).rename(columns={'name':'게임명', '표기용_시간':'플레이타임'}), use_container_width=True, hide_index=True)
+                        with t2:
+                            st.dataframe(friend_df[['name', '표기용_시간']].head(5).rename(columns={'name':'게임명', '표기용_시간':'플레이타임'}), use_container_width=True, hide_index=True)
+
                         my_top_time = my_df.iloc[0]['플레이타임(시간)']
                         fr_top_time = friend_df.iloc[0]['플레이타임(시간)']
                         st.subheader(f"Round 2. 한 우물(1위 게임) 썩은물 대결 (승자: {'나 👑' if my_top_time > fr_top_time else '친구 👑'})")
@@ -144,12 +169,10 @@ with tab1:
                         r2_1.metric(f"나의 최애: {my_top_game}", f"{int(my_top_time)} 시간")
                         r2_2.metric(f"친구의 최애: {friend_df.iloc[0]['name']}", f"{int(fr_top_time)} 시간")
 
-                        # [라운드 3] 자존심이 걸린 '공통 게임' 맞붙기 차트
                         st.subheader("Round 3. ⚔️ 자존심이 걸린 공통 게임 맞다이")
                         common_df = pd.merge(my_df[['name', '플레이타임(시간)']], friend_df[['name', '플레이타임(시간)']], on='name', suffixes=('_나', '_친구'))
                         
                         if not common_df.empty:
-                            # 플레이타임 합계가 높은 상위 5개 게임만 추출
                             common_df['합계'] = common_df['플레이타임(시간)_나'] + common_df['플레이타임(시간)_친구']
                             top_common = common_df.sort_values(by='합계', ascending=False).head(5)
                             
@@ -161,25 +184,18 @@ with tab1:
                             st.plotly_chart(fig_battle, use_container_width=True)
                         else:
                             st.info("같이 한 게임이 하나도 없습니다! 성향이 완전히 반대네요 ㅋㅋㅋ")
-                
-                # DNA 및 전체 라이브러리 차트
-                st.divider()
-                st.subheader("🧬 나의 게이밍 장르 DNA")
-                genre_df = my_df.groupby('장르')['플레이타임(시간)'].sum().reset_index().sort_values(by='플레이타임(시간)', ascending=False)
-                if len(genre_df) > 5:
-                    top_4 = genre_df.head(4)
-                    others_hours = genre_df.iloc[4:]['플레이타임(시간)'].sum()
-                    genre_df = pd.concat([top_4, pd.DataFrame({'장르': ['그 외 잡다한 장르들'], '플레이타임(시간)': [others_hours]})], ignore_index=True)
-                genre_df['포맷_시간'] = genre_df['플레이타임(시간)'].apply(format_playtime)
-                fig_pie = px.pie(genre_df, values='플레이타임(시간)', names='장르', hole=0.4)
-                fig_pie.update_traces(textposition='inside', textinfo='percent+label', textfont=dict(size=14, color='white'), customdata=genre_df['포맷_시간'], hovertemplate="<b>%{label}</b><br>플레이타임: %{customdata}<extra></extra>")
-                st.plotly_chart(fig_pie, use_container_width=True)
 
 with tab2:
     st.header("🏆 글로벌 랭킹 (명예의 전당)")
     file_path = 'steam_leaderboard.csv'
+    
     if os.path.exists(file_path):
-        lb_df = pd.read_csv(file_path, dtype={'SteamID': str}).sort_values(by='총_플레이타임(시간)', ascending=False).reset_index(drop=True)
+        lb_df = pd.read_csv(file_path, dtype={'SteamID': str})
+        lb_df = lb_df.sort_values(by='총_플레이타임(시간)', ascending=False)
+        lb_df = lb_df.reset_index(drop=True)
+        
         lb_df['순위'] = [f"{i+1}위" for i in range(len(lb_df))]
         lb_df['총 플레이타임'] = lb_df['총_플레이타임(시간)'].apply(format_playtime)
-        st.dataframe(lb_df[['순위', '닉네임', '총 플레이타임', '인생_게임', '게이밍_성향']].set_index('순위'), use_container_width=True)
+        
+        display_lb = lb_df[['순위', '닉네임', '총 플레이타임', '인생_게임', '게이밍_성향']].set_index('순위')
+        st.dataframe(display_lb, use_container_width=True)

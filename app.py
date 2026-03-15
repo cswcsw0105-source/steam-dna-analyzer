@@ -79,4 +79,104 @@ st.title("🔥 스팀 게이밍 DNA & 전적 배틀")
 tab1, tab2 = st.tabs(["🎮 전적 분석 & 배틀", "🏆 명예의 전당 (리더보드)"])
 
 with tab1:
-    col_search1, col
+    col_search1, col_search2 = st.columns(2)
+    with col_search1:
+        my_id = st.text_input("👑 내 SteamID64 (필수):", "76561198028121353")
+    with col_search2:
+        friend_id = st.text_input("⚔️ 친구 SteamID64 (배틀용, 선택):", "")
+
+    if st.button("전적 분석 & 배틀 시작!"):
+        with st.spinner('서버에서 데이터를 불러오는 중...'):
+            my_df = get_steam_data(my_id)
+            
+            if my_df is None or my_df.empty:
+                st.error("데이터를 불러올 수 없거나 게임 기록이 없습니다.")
+            else:
+                my_nickname = get_steam_profile_name(my_id) 
+                my_total_hours = my_df['플레이타임(시간)'].sum()
+                my_top_game = my_df.iloc[0]['name']
+                top_genre_hours = my_df.groupby('장르')['플레이타임(시간)'].sum()
+                top_genre = top_genre_hours.idxmax() if top_genre_hours.idxmax() != '기타 장르' or len(top_genre_hours) == 1 else top_genre_hours.drop('기타 장르').idxmax()
+
+                save_to_db(my_id, my_nickname, my_total_hours, my_top_game, top_genre)
+
+                st.divider()
+                st.subheader(f"📸 {my_nickname}님의 Instagram 공유용 카드")
+                with st.container(border=True):
+                    c1, c2, c3 = st.columns(3)
+                    c1.metric("총 갈아넣은 시간", f"{int(my_total_hours):,} 시간")
+                    c2.metric("인생 최고의 게임", my_top_game[:12] + ".." if len(my_top_game) > 12 else my_top_game)
+                    c3.metric("나의 게이밍 성향", f"{top_genre} 마스터")
+
+                st.subheader("💥 팩폭: 이 시간에 게임 안 하고 갓생을 살았다면?")
+                with st.container(border=True):
+                    f1, f2 = st.columns(2)
+                    lost_money = my_total_hours * MINIMUM_WAGE_2026
+                    univ_tier = get_university_tier(my_total_hours)
+                    f1.metric("💸 2026년 최저시급(10,320원) 알바를 했다면?", f"약 {int(lost_money / 10000):,}만 원", delta="내 포르쉐 박스터가 허공에...", delta_color="inverse")
+                    f2.metric("📚 이 시간 동안 수능 공부를 했다면?", univ_tier, delta="내 잃어버린 학벌...", delta_color="inverse")
+
+                # --- ⚔️ 진짜 배틀 로직 ---
+                if friend_id:
+                    st.divider()
+                    st.header("🥊 라운드별 영혼의 맞다이: 나 vs 친구")
+                    friend_df = get_steam_data(friend_id)
+                    
+                    if friend_df is not None and not friend_df.empty:
+                        friend_nickname = get_steam_profile_name(friend_id)
+                        friend_total = friend_df['플레이타임(시간)'].sum()
+                        
+                        f_top_genre_hours = friend_df.groupby('장르')['플레이타임(시간)'].sum()
+                        f_top_genre = f_top_genre_hours.idxmax() if f_top_genre_hours.idxmax() != '기타 장르' or len(f_top_genre_hours) == 1 else f_top_genre_hours.drop('기타 장르').idxmax()
+                        save_to_db(friend_id, friend_nickname, friend_total, friend_df.iloc[0]['name'], f_top_genre)
+                        
+                        # [라운드 1] 총 플레이타임
+                        st.subheader(f"Round 1. 총 잉여 시간 대결 (승자: {'나 👑' if my_total_hours > friend_total else '친구 👑'})")
+                        b1, b2 = st.columns(2)
+                        b1.metric(f"나 ({my_nickname})", f"{int(my_total_hours):,} 시간")
+                        b2.metric(f"친구 ({friend_nickname})", f"{int(friend_total):,} 시간", delta=f"{int(friend_total - my_total_hours)}시간 차이", delta_color="inverse")
+
+                        # [라운드 2] 한 우물 장인 대결
+                        my_top_time = my_df.iloc[0]['플레이타임(시간)']
+                        fr_top_time = friend_df.iloc[0]['플레이타임(시간)']
+                        st.subheader(f"Round 2. 한 우물(1위 게임) 썩은물 대결 (승자: {'나 👑' if my_top_time > fr_top_time else '친구 👑'})")
+                        r2_1, r2_2 = st.columns(2)
+                        r2_1.metric(f"나의 최애: {my_top_game}", f"{int(my_top_time)} 시간")
+                        r2_2.metric(f"친구의 최애: {friend_df.iloc[0]['name']}", f"{int(fr_top_time)} 시간")
+
+                        # [라운드 3] 자존심이 걸린 '공통 게임' 맞붙기 차트
+                        st.subheader("Round 3. ⚔️ 자존심이 걸린 공통 게임 맞다이")
+                        common_df = pd.merge(my_df[['name', '플레이타임(시간)']], friend_df[['name', '플레이타임(시간)']], on='name', suffixes=('_나', '_친구'))
+                        
+                        if not common_df.empty:
+                            # 플레이타임 합계가 높은 상위 5개 게임만 추출
+                            common_df['합계'] = common_df['플레이타임(시간)_나'] + common_df['플레이타임(시간)_친구']
+                            top_common = common_df.sort_values(by='합계', ascending=False).head(5)
+                            
+                            fig_battle = go.Figure(data=[
+                                go.Bar(name=my_nickname, x=top_common['name'], y=top_common['플레이타임(시간)_나'], marker_color='#1f77b4'),
+                                go.Bar(name=friend_nickname, x=top_common['name'], y=top_common['플레이타임(시간)_친구'], marker_color='#d62728')
+                            ])
+                            fig_battle.update_layout(barmode='group', title="같은 게임, 다른 인생 (공통 보유 게임 플레이타임 비교)")
+                            st.plotly_chart(fig_battle, use_container_width=True)
+                        else:
+                            st.info("같이 한 게임이 하나도 없습니다! 성향이 완전히 반대네요 ㅋㅋㅋ")
+                
+                # DNA 및 전체 라이브러리 차트
+                st.divider()
+                st.subheader("🧬 나의 게이밍 장르 DNA")
+                genre_df = my_df.groupby('장르')['플레이타임(시간)'].sum().reset_index().sort_values(by='플레이타임(시간)', ascending=False)
+                if len(genre_df) > 5:
+                    top_4 = genre_df.head(4)
+                    others_hours = genre_df.iloc[4:]['플레이타임(시간)'].sum()
+                    genre_df = pd.concat([top_4, pd.DataFrame({'장르': ['그 외 잡다한 장르들'], '플레이타임(시간)': [others_hours]})], ignore_index=True)
+                genre_df['포맷_시간'] = genre_df['플레이타임(시간)'].apply(format_playtime)
+                fig_pie = px.pie(genre_df, values='플레이타임(시간)', names='장르', hole=0.4)
+                fig_pie.update_traces(textposition='inside', textinfo='percent+label', textfont=dict(size=14, color='white'), customdata=genre_df['포맷_시간'], hovertemplate="<b>%{label}</b><br>플레이타임: %{customdata}<extra></extra>")
+                st.plotly_chart(fig_pie, use_container_width=True)
+
+with tab2:
+    st.header("🏆 글로벌 랭킹 (명예의 전당)")
+    file_path = 'steam_leaderboard.csv'
+    if os.path.exists(file_path):
+        lb_df = pd.read_csv(file_path, dtype={'SteamID': str}).sort_values(

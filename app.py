@@ -27,13 +27,14 @@ def format_playtime(hours_float):
     if m == 0: return f"{h}시간"
     return f"{h}시간 {m}분"
 
-# ✨ [NEW] 현실적인 시간대로 조정한 팩폭 함수들
+# ✨ [UPDATE] 수능 등급 및 대학 간판 기준으로 변경된 함수
 def get_university_tier(hours):
-    if hours >= 2000: return "서울대 경영학과 수석 입학 🦅"
-    elif hours >= 1000: return "인서울 최상위권 대학 프리패스 🏫"
-    elif hours >= 500: return "과탑 먹고 4년 전액 장학금 💰"
-    elif hours >= 200: return "학점 4.5 만점 졸업 🎓"
-    else: return "기말고사 전과목 A+ 💯"
+    if hours >= 5000: return "서울대 정시 프리패스 🥇"
+    elif hours >= 3000: return "SKY(서연고) 합격 & 수능 올 1등급 🦅"
+    elif hours >= 1500: return "서성한 합격 & 수능 수학 1등급 확정 💯"
+    elif hours >= 800: return "중경외시 합격 & 수능 국영수 1등급 🎯"
+    elif hours >= 300: return "인서울 주요 대학 합격 & 수능 2등급 상승 📈"
+    else: return "수능 탐구 영역 만점 💯"
 
 def get_coding_tier(hours):
     if hours >= 1000: return "파이썬 마스터 & 빅테크 프론트엔드 합격 🚀"
@@ -119,19 +120,16 @@ with tab1:
                     c2.metric("인생 최고의 게임", my_top_game[:12] + ".." if len(my_top_game) > 12 else my_top_game)
                     c3.metric("나의 게이밍 성향", f"{top_genre} 마스터")
 
-                # ✨ [NEW] 4분할 갓생 팩폭 매트릭스 추가
                 st.subheader("💥 팩폭: 이 시간에 게임 안 하고 갓생을 살았다면?")
                 with st.container(border=True):
                     f1, f2 = st.columns(2)
                     f3, f4 = st.columns(2)
                     lost_money = my_total_hours * MINIMUM_WAGE_2026
-                    
-                    # TIGER 미국 S&P500 등락을 고려해 대략 주당 18,000원으로 산정
                     etf_shares = int(lost_money / 18000) 
                     
                     f1.metric("💸 증발한 내 알바비 (시급 10,320원)", f"약 {int(lost_money / 10000):,}만 원", delta=f"TIGER 미국 S&P500 ETF 약 {etf_shares:,}주 매수 가능", delta_color="inverse")
                     f2.metric("🏎️ 잃어버린 라이프스타일", get_lifestyle_tier(lost_money), delta="통장 잔고 증발...", delta_color="inverse")
-                    f3.metric("📚 잃어버린 학벌 및 성적", get_university_tier(my_total_hours), delta="내 잃어버린 학점...", delta_color="inverse")
+                    f3.metric("📚 잃어버린 학벌 및 수능 성적", get_university_tier(my_total_hours), delta="내 잃어버린 대학 간판...", delta_color="inverse")
                     f4.metric("💻 잃어버린 자기계발", get_coding_tier(my_total_hours), delta="개발자 취업 기회 증발...", delta_color="inverse")
 
                 st.divider()

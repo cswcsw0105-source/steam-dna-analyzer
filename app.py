@@ -8,13 +8,15 @@ st.set_page_config(page_title="Steam DNA & Battle", page_icon="🔥", layout="wi
 
 STEAM_API_KEY = "ACFFB08C7B7E24EAC7ED03414035F9DC"
 
+# 친구를 위한 '스포츠' 장르 등 대폭 추가
 GENRE_MAP = {
     "Tom Clancy's Rainbow Six Siege": "FPS", "PUBG: BATTLEGROUNDS": "FPS", 
     "Apex Legends": "FPS", "Counter-Strike 2": "FPS", "Overwatch 2": "FPS",
     "Grand Theft Auto V": "오픈월드", "Grand Theft Auto V Legacy": "오픈월드", 
     "Cyberpunk 2077": "RPG", "ELDEN RING": "RPG",
     "Stardew Valley": "시뮬레이션", "Dota 2": "AOS", "Rust": "생존",
-    "TEKKEN 7": "격투", "F1® 24": "레이싱" 
+    "TEKKEN 7": "격투", "F1® 24": "레이싱", 
+    "EA SPORTS FC™ 24": "스포츠", "FIFA 22": "스포츠", "FIFA 23": "스포츠", "Football Manager 2024": "스포츠"
 }
 
 def format_playtime(hours_float):
@@ -24,7 +26,6 @@ def format_playtime(hours_float):
     if m == 0: return f"{h}시간"
     return f"{h}시간 {m}분"
 
-# ✨ [NEW] 스팀 프로필 '닉네임'을 자동으로 훔쳐(?)오는 함수
 def get_steam_profile_name(steam_id):
     url = "http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/"
     params = {"key": STEAM_API_KEY, "steamids": steam_id}
@@ -56,27 +57,22 @@ def get_steam_data(steam_id):
     df['장르'] = df['name'].apply(lambda x: GENRE_MAP.get(x, '기타 장르'))
     return df.sort_values(by='플레이타임(시간)', ascending=False).reset_index(drop=True)
 
-# ✨ [FIX] 중복 저장 완벽 차단 및 닉네임 저장 추가
 def save_to_db(steam_id, nickname, total_hours, top_game, top_genre):
     file_path = 'steam_leaderboard.csv'
     new_data = pd.DataFrame({
-        'SteamID': [str(steam_id)],  # 무조건 텍스트로 고정
-        '닉네임': [nickname],        # 스팀 닉네임 추가!
+        'SteamID': [str(steam_id)],  
+        '닉네임': [nickname],        
         '총_플레이타임(시간)': [total_hours],
         '인생_게임': [top_game],
         '게이밍_성향': [top_genre]
     })
     
     if os.path.exists(file_path):
-        # 읽어올 때도 SteamID를 무조건 텍스트(str)로 읽게 강제 지정
         df = pd.read_csv(file_path, dtype={'SteamID': str})
-        # 기존에 있던 내 기록 삭제 (중복 방지)
         df = df[df['SteamID'] != str(steam_id)] 
-        # 최신 기록으로 밑에 이어 붙이기
         df = pd.concat([df, new_data], ignore_index=True)
     else:
         df = new_data
-        
     df.to_csv(file_path, index=False)
 
 st.title("🔥 스팀 게이밍 DNA & 전적 배틀")
@@ -94,12 +90,10 @@ with tab1:
         with st.spinner('서버에서 데이터를 불러오는 중...'):
             my_df = get_steam_data(my_id)
             
-            if my_df is None:
-                st.error("내 계정 데이터를 불러올 수 없습니다.")
-            elif my_df.empty:
-                st.warning("⚠️ 이 계정은 1분 이상 플레이한 게임 기록이 전혀 없습니다!")
+            if my_df is None or my_df.empty:
+                st.error("데이터를 불러올 수 없거나 게임 기록이 없습니다.")
             else:
-                my_nickname = get_steam_profile_name(my_id) # 닉네임 훔쳐오기
+                my_nickname = get_steam_profile_name(my_id) 
                 my_total_hours = my_df['플레이타임(시간)'].sum()
                 my_top_game = my_df.iloc[0]['name']
                 
@@ -113,14 +107,28 @@ with tab1:
                 st.divider()
                 st.subheader(f"📸 {my_nickname}님의 Instagram 공유용 카드")
                 with st.container(border=True):
-                    c1, c2, c3 = st.columns(3)
+                    c1, c2, c3, c4 = st.columns(4)
                     c1.metric("총 갈아넣은 시간", f"{int(my_total_hours):,} 시간")
-                    c2.metric("인생 최고의 게임", my_top_game[:15] + ".." if len(my_top_game) > 15 else my_top_game)
+                    c2.metric("인생 최고의 게임", my_top_game[:12] + ".." if len(my_top_game) > 12 else my_top_game)
                     c3.metric("나의 게이밍 성향", f"{top_genre} 마스터")
-                    st.caption("✨ 캡처해서 인스타 스토리에 올려보세요! #SteamDNA #인생전적")
+                    
+                    # ✨ [NEW] 마케팅 소구점: 시급 11,000원으로 환산한 기회비용 팩폭!
+                    lost_money = my_total_hours * 11000
+                    c4.metric("💸 이 시간에 알바를 했다면?", f"약 {int(lost_money / 10000):,}만 원", delta="증발해버린 내 돈...", delta_color="inverse")
+                    
+                    st.caption("✨ 캡처해서 친구를 도발해보세요! #SteamDNA #내돈내산시간")
 
                 st.subheader("🧬 나의 게이밍 장르 DNA")
+                # ✨ [NEW] 선웅이의 아이디어: 상위 4개 장르만 살리고 나머지는 기타로 묶기
                 genre_df = my_df.groupby('장르')['플레이타임(시간)'].sum().reset_index()
+                genre_df = genre_df.sort_values(by='플레이타임(시간)', ascending=False)
+                
+                if len(genre_df) > 5:
+                    top_4 = genre_df.head(4)
+                    others_hours = genre_df.iloc[4:]['플레이타임(시간)'].sum()
+                    others_df = pd.DataFrame({'장르': ['그 외 잡다한 장르들'], '플레이타임(시간)': [others_hours]})
+                    genre_df = pd.concat([top_4, others_df], ignore_index=True)
+                
                 genre_df['포맷_시간'] = genre_df['플레이타임(시간)'].apply(format_playtime)
                 fig_pie = px.pie(genre_df, values='플레이타임(시간)', names='장르', hole=0.4)
                 fig_pie.update_traces(
@@ -148,11 +156,11 @@ with tab1:
                         
                         b1, b2 = st.columns(2)
                         with b1:
-                            st.subheader(f"👑 {my_nickname} 전적")
+                            st.subheader(f"👑 {my_nickname}")
                             st.metric("총 플레이타임", f"{int(my_total_hours):,} 시간")
                             st.dataframe(my_df[['name', '표기용_시간']].head(5).rename(columns={'name':'게임명', '표기용_시간':'플레이타임'}), use_container_width=True, hide_index=True)
                         with b2:
-                            st.subheader(f"⚔️ {friend_nickname} 전적")
+                            st.subheader(f"⚔️ {friend_nickname}")
                             delta_val = friend_total - my_total_hours
                             st.metric("총 플레이타임", f"{int(friend_total):,} 시간", delta=f"나와의 차이: {int(delta_val):,}시간", delta_color="inverse")
                             st.dataframe(friend_df[['name', '표기용_시간']].head(5).rename(columns={'name':'게임명', '표기용_시간':'플레이타임'}), use_container_width=True, hide_index=True)
@@ -167,7 +175,6 @@ with tab1:
 
 with tab2:
     st.header("🏆 글로벌 랭킹 (명예의 전당)")
-    st.write("우리 플랫폼에서 전적을 분석한 유저들의 플레이타임 랭킹입니다.")
     
     file_path = 'steam_leaderboard.csv'
     if os.path.exists(file_path):
@@ -176,9 +183,6 @@ with tab2:
         lb_df['순위'] = [f"{i+1}위" for i in range(len(lb_df))]
         
         lb_df['총 플레이타임'] = lb_df['총_플레이타임(시간)'].apply(format_playtime)
-        # ✨ 17자리 숫자 빼고 '닉네임'으로 깔끔하게 출력
         display_lb = lb_df[['순위', '닉네임', '총 플레이타임', '인생_게임', '게이밍_성향']].set_index('순위')
         
         st.dataframe(display_lb, use_container_width=True)
-    else:
-        st.info("아직 등록된 게이머가 없습니다. 첫 번째로 전적을 분석하고 1위를 차지하세요!")

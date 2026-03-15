@@ -179,4 +179,7 @@ with tab2:
     st.header("🏆 글로벌 랭킹 (명예의 전당)")
     file_path = 'steam_leaderboard.csv'
     if os.path.exists(file_path):
-        lb_df = pd.read_csv(file_path, dtype={'SteamID': str}).sort_values(
+        lb_df = pd.read_csv(file_path, dtype={'SteamID': str}).sort_values(by='총_플레이타임(시간)', ascending=False).reset_index(drop=True)
+        lb_df['순위'] = [f"{i+1}위" for i in range(len(lb_df))]
+        lb_df['총 플레이타임'] = lb_df['총_플레이타임(시간)'].apply(format_playtime)
+        st.dataframe(lb_df[['순위', '닉네임', '총 플레이타임', '인생_게임', '게이밍_성향']].set_index('순위'), use_container_width=True)

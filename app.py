@@ -7,8 +7,8 @@ import os
 st.set_page_config(page_title="Steam DNA & Battle", page_icon="🔥", layout="wide")
 
 STEAM_API_KEY = "ACFFB08C7B7E24EAC7ED03414035F9DC"
+MINIMUM_WAGE_2026 = 10320 # 2026년 대한민국 확정 최저시급
 
-# 친구를 위한 '스포츠' 장르 등 대폭 추가
 GENRE_MAP = {
     "Tom Clancy's Rainbow Six Siege": "FPS", "PUBG: BATTLEGROUNDS": "FPS", 
     "Apex Legends": "FPS", "Counter-Strike 2": "FPS", "Overwatch 2": "FPS",
@@ -25,6 +25,15 @@ def format_playtime(hours_float):
     if h == 0: return f"{m}분"
     if m == 0: return f"{h}시간"
     return f"{h}시간 {m}분"
+
+# ✨ [NEW] 플레이타임별 예상 학벌 매칭 함수
+def get_university_tier(hours):
+    if hours >= 10000: return "하버드·MIT 수석 입학 🎓"
+    elif hours >= 5000: return "서울대 의대 프리패스 🩺"
+    elif hours >= 3000: return "SKY (서연고) 프리패스 🦅"
+    elif hours >= 1500: return "인서울 주요 대학 쌉가능 🏫"
+    elif hours >= 500: return "지거국 수석 입학 🏛️"
+    else: return "내신 1~2등급은 거뜬히 상승 📈"
 
 def get_steam_profile_name(steam_id):
     url = "http://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/"
@@ -107,19 +116,23 @@ with tab1:
                 st.divider()
                 st.subheader(f"📸 {my_nickname}님의 Instagram 공유용 카드")
                 with st.container(border=True):
-                    c1, c2, c3, c4 = st.columns(4)
+                    c1, c2, c3 = st.columns(3)
                     c1.metric("총 갈아넣은 시간", f"{int(my_total_hours):,} 시간")
                     c2.metric("인생 최고의 게임", my_top_game[:12] + ".." if len(my_top_game) > 12 else my_top_game)
                     c3.metric("나의 게이밍 성향", f"{top_genre} 마스터")
+                    st.caption("✨ 캡처해서 인스타 스토리에 올려보세요! #SteamDNA #인생전적")
+
+                # ✨ [NEW] 팩트 폭력 섹션 분리 및 강화
+                st.subheader("💥 팩폭: 이 시간에 게임 안 하고 갓생을 살았다면?")
+                with st.container(border=True):
+                    f1, f2 = st.columns(2)
+                    lost_money = my_total_hours * MINIMUM_WAGE_2026
+                    univ_tier = get_university_tier(my_total_hours)
                     
-                    # ✨ [NEW] 마케팅 소구점: 시급 11,000원으로 환산한 기회비용 팩폭!
-                    lost_money = my_total_hours * 11000
-                    c4.metric("💸 이 시간에 알바를 했다면?", f"약 {int(lost_money / 10000):,}만 원", delta="증발해버린 내 돈...", delta_color="inverse")
-                    
-                    st.caption("✨ 캡처해서 친구를 도발해보세요! #SteamDNA #내돈내산시간")
+                    f1.metric("💸 2026년 최저시급(10,320원) 알바를 했다면?", f"약 {int(lost_money / 10000):,}만 원", delta="증발해버린 내 돈...", delta_color="inverse")
+                    f2.metric("📚 이 시간 동안 수능 공부를 했다면?", univ_tier, delta="내 잃어버린 학벌...", delta_color="inverse")
 
                 st.subheader("🧬 나의 게이밍 장르 DNA")
-                # ✨ [NEW] 선웅이의 아이디어: 상위 4개 장르만 살리고 나머지는 기타로 묶기
                 genre_df = my_df.groupby('장르')['플레이타임(시간)'].sum().reset_index()
                 genre_df = genre_df.sort_values(by='플레이타임(시간)', ascending=False)
                 

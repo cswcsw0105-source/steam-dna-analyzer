@@ -78,4 +78,14 @@ if analyze_btn:
                                      color='플레이타임(시간)', color_continuous_scale='Turbo')
                     fig_bar.update_yaxes(title_text="") 
                     fig_bar.update_xaxes(title_text="플레이타임 (시간)")
-                    fig_bar.update_traces(text=df_top.sort_values(by='
+                    fig_bar.update_traces(text=df_top.sort_values(by='플레이타임(시간)', ascending=True)['플레이타임'], textposition='inside', insidetextanchor='middle')
+                    fig_bar.update_layout(height=500)
+                    st.plotly_chart(fig_bar, use_container_width=True)
+                    
+                    # 표 출력
+                    st.subheader("📑 상세 라이브러리 전적")
+                    display_df = df_top[['순위', 'name', '플레이타임']].set_index('순위')
+                    display_df.rename(columns={'name': '게임명'}, inplace=True)
+                    st.dataframe(display_df, use_container_width=True)
+            else:
+                st.error(f"통신 오류가 발생했습니다. (상태 코드: {response.status_code})")
